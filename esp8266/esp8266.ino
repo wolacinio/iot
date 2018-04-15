@@ -5,11 +5,14 @@
  License: Apache License v2
 */
 #include <ESP8266WiFi.h>
-#include <PubSubClient.h> // https://github.com/knolleary/pubsubclient/releases/tag/v2.3
-#include <ArduinoJson.h> // https://github.com/bblanchon/ArduinoJson/releases/tag/v5.0.7
+#include<SoftwareSerial.h>
+#include <PubSubClient.h>  https:github.com/knolleary/pubsubclient/releases/tag/v2.3
+#include <ArduinoJson.h>  https:github.com/bblanchon/ArduinoJson/releases/tag/v5.0.7
 
-const char* ssid = "<wifi-ssid>";
-const char* password = "<wifi-pass>;
+SoftwareSerial softSerial(D2, D3);  //RX, TX
+
+const char* ssid = "";
+const char* password = "";
 
 #define ORG ""
 #define DEVICE_TYPE ""
@@ -22,20 +25,19 @@ char token[] = TOKEN;
 char clientId[] = "d:" ORG ":" DEVICE_TYPE ":" DEVICE_ID;
 
 const char publishTopic[] = "iot-2/evt/status/fmt/json";
-//const char responseTopic[] = "iotdm-1/response";
 const char manageTopic[] = "iotdevice-1/mgmt/manage";
 const char updateTopic[] = "iotdm-1/device/update";
-//const char rebootTopic[] = "iotdm-1/mgmt/initiate/device/reboot";
 
 void callback(char* topic, byte* payload, unsigned int payloadLength);
 
 WiFiClient wifiClient;
 PubSubClient client(server, 1883, callback, wifiClient);
 
-int publishInterval = 30000; // 30 seconds
+int publishInterval = 30000;  //30 seconds
 long lastPublishMillis;
 
 void setup() {
+ softSerial.begin(9600);
  Serial.begin(115200); Serial.println();
 
  wifiConnect();
@@ -45,8 +47,15 @@ void setup() {
 
 void loop() {
  if (millis() - lastPublishMillis > publishInterval) {
-   publishData();
-   lastPublishMillis = millis();
+   if(softSerial.available() > 0) {
+     Serial.println("SoftSerial available");
+     float temp = softSerial.parseFloat();
+     if (softSerial.read() == '\n') {
+       Serial.print("Temp: ");Serial.println(temp);
+       //publishData(temp);
+       lastPublishMillis = millis();
+     } 
+   }
  }
 
  if (!client.loop()) {
@@ -62,7 +71,7 @@ void wifiConnect() {
    delay(500);
    Serial.print(".");
  }
- Serial.print("nWiFi connected, IP address: "); Serial.println(WiFi.localIP());
+ Serial.print("\nWiFi connected, IP address: "); Serial.println(WiFi.localIP());
 }
 
 void mqttConnect() {
@@ -77,18 +86,6 @@ void mqttConnect() {
 }
 
 void initManagedDevice() {
-// if (client.subscribe("iotdm-1/response")) {
-//   Serial.println("subscribe to responses OK");
-// } else {
-//   Serial.println("subscribe to responses FAILED");
-// }
-//
-// if (client.subscribe(rebootTopic)) {
-//   Serial.println("subscribe to reboot OK");
-// } else {
-//   Serial.println("subscribe to reboot FAILED");
-// }
-
  if (client.subscribe("iotdm-1/device/update")) {
    Serial.println("subscribe to update OK");
  } else {
@@ -113,9 +110,9 @@ void initManagedDevice() {
  }
 }
 
-void publishData() {
- String payload = "{\"d\":{\"counter\":";
- payload += millis() / 1000;
+void publishData(float temp) {
+ String payload = "{\"d\":{\"temp\":";
+ payload += temp;
  payload += "}}";
 
  Serial.print("Sending payload: "); Serial.println(payload);
@@ -129,15 +126,6 @@ void publishData() {
 
 void callback(char* topic, byte* payload, unsigned int payloadLength) {
  Serial.print("callback invoked for topic: "); Serial.println(topic);
-//
-// if (strcmp (responseTopic, topic) == 0) {
-//   return; // just print of response for now
-// }
-//
-// if (strcmp (rebootTopic, topic) == 0) {
-//   Serial.println("Rebooting...");
-//   ESP.restart();
-// }
 
  if (strcmp (updateTopic, topic) == 0) {
    handleUpdate(payload);
@@ -162,6 +150,8 @@ void handleUpdate(byte* payload) {
      JsonObject& fieldValue = field["value"];
      if (fieldValue.containsKey("publishInterval")) {
        publishInterval = fieldValue["publishInterval"];
+       softSerial.print(publishInterval);
+       softSerial.print("\n");
        Serial.print("publishInterval:"); Serial.println(publishInterval);
      }
    }
