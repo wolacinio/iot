@@ -30,3 +30,6 @@
 *.exe
 *.out
 *.app
+
+# DeviceInfos
+esp8266/device_info.txt
