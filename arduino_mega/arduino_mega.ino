@@ -12,21 +12,38 @@ void setup() {
 }
 
 void loop() {
-  if (millis() - lastPublishMillis > publishInterval) {
-    Serial.print("Temp: ");
-    Serial.println(temp);
-    softSerial.print(temp);
-    softSerial.print("\n");
-    temp += 1.5;
-    lastPublishMillis = millis();
-  }
+  if (hasIntervalElapsed()) sendSensorData();
+  checkIntervalValueUpdate();
+}
 
+boolean hasIntervalElapsed() {
+  return millis() - lastPublishMillis > publishInterval;
+}
+
+void sendSensorData() {
+  Serial.print("Temp: ");
+  Serial.println(temp);
+  softSerial.print(temp);
+  softSerial.print("\n");
+  temp += 1.5;
+  lastPublishMillis = millis();
+}
+
+void checkIntervalValueUpdate() {
   if(softSerial.available() > 0) {
     int interval = softSerial.parseInt();
     if (softSerial.read() == '\n') {
-      Serial.print("New interval: ");
-      Serial.println(interval);
-      publishInterval = interval;
+      if (interval >= 1000) {
+        publishInterval = interval;
+        Serial.print("Interval set to: ");
+        Serial.println(publishInterval);
+      } else {
+        Serial.print("Interval value to low: ");
+        Serial.println(interval);
+        Serial.print("Current interval value: ");
+        Serial.println(publishInterval);
+      }
     }
   }
 }
+

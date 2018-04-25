@@ -1,13 +1,7 @@
-/**
- IBM IoT Foundation managed Device
-
- Author: Ant Elder
- License: Apache License v2
-*/
 #include <ESP8266WiFi.h>
 #include<SoftwareSerial.h>
-#include <PubSubClient.h>  https:github.com/knolleary/pubsubclient/releases/tag/v2.3
-#include <ArduinoJson.h>  https:github.com/bblanchon/ArduinoJson/releases/tag/v5.0.7
+#include <PubSubClient.h>  //https:github.com/knolleary/pubsubclient/releases/tag/v2.3
+#include <ArduinoJson.h>  //https:github.com/bblanchon/ArduinoJson/releases/tag/v5.0.7
 
 SoftwareSerial softSerial(D2, D3);  //RX, TX
 
@@ -46,22 +40,26 @@ void setup() {
 }
 
 void loop() {
- if (millis() - lastPublishMillis > publishInterval) {
-   if(softSerial.available() > 0) {
-     Serial.println("SoftSerial available");
-     float temp = softSerial.parseFloat();
-     if (softSerial.read() == '\n') {
-       Serial.print("Temp: ");Serial.println(temp);
-       //publishData(temp);
-       lastPublishMillis = millis();
-     } 
-   }
- }
-
+ if (hasIntervalElapsed()) readAndPublishSensorData();
  if (!client.loop()) {
    mqttConnect();
    initManagedDevice();
  }
+}
+
+boolean hasIntervalElapsed() {
+  return millis() - lastPublishMillis > publishInterval;
+}
+
+void readAndPublishSensorData() {
+   if(softSerial.available() > 0) {
+     float temp = softSerial.parseFloat();
+     if (softSerial.read() == '\n') {
+       Serial.print("Temp: ");Serial.println(temp);
+       publishData(temp);
+       lastPublishMillis = millis();
+     } 
+   }
 }
 
 void wifiConnect() {
@@ -86,7 +84,7 @@ void mqttConnect() {
 }
 
 void initManagedDevice() {
- if (client.subscribe("iotdm-1/device/update")) {
+ if (client.subscribe(updateTopic)) {
    Serial.println("subscribe to update OK");
  } else {
    Serial.println("subscribe to update FAILED");
@@ -98,7 +96,7 @@ void initManagedDevice() {
  JsonObject& metadata = d.createNestedObject("metadata");
  metadata["publishInterval"] = publishInterval;
  JsonObject& supports = d.createNestedObject("supports");
- supports["deviceActions"] = true;
+ supports["deviceActions"] = false;
 
  char buff[300];
  root.printTo(buff, sizeof(buff));
@@ -150,9 +148,9 @@ void handleUpdate(byte* payload) {
      JsonObject& fieldValue = field["value"];
      if (fieldValue.containsKey("publishInterval")) {
        publishInterval = fieldValue["publishInterval"];
-       softSerial.print(publishInterval);
-       softSerial.print("\n");
        Serial.print("publishInterval:"); Serial.println(publishInterval);
+       softSerial.print(publishInterval);
+       softSerial.print("\n");       
      }
    }
  }
