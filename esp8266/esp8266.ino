@@ -1,7 +1,7 @@
-#include <ESP8266WiFi.h>
+#include<ESP8266WiFi.h>
 #include<SoftwareSerial.h>
-#include <PubSubClient.h>  //https:github.com/knolleary/pubsubclient/releases/tag/v2.3
-#include <ArduinoJson.h>  //https:github.com/bblanchon/ArduinoJson/releases/tag/v5.0.7
+#include<PubSubClient.h>  //https:github.com/knolleary/pubsubclient/releases/tag/v2.3
+#include<ArduinoJson.h>  //https:github.com/bblanchon/ArduinoJson/releases/tag/v5.0.7
 
 SoftwareSerial softSerial(D2, D3);  //RX, TX
 
@@ -53,12 +53,14 @@ boolean hasIntervalElapsed() {
 
 void readAndPublishSensorData() {
    if(softSerial.available() > 0) {
-     float temp = softSerial.parseFloat();
-     if (softSerial.read() == '\n') {
-       Serial.print("Temp: ");Serial.println(temp);
-       publishData(temp);
-       lastPublishMillis = millis();
-     } 
+     StaticJsonBuffer<200> jsonBuffer;
+     JsonObject& root = jsonBuffer.parseObject(softSerial.readString());
+     float temp = root["temp"];
+     float pres = root["pres"];
+     Serial.print("Temp: ");Serial.println(temp);
+     Serial.print("Press: ");Serial.println(pres);
+     publishData(root);
+     lastPublishMillis = millis();
    }
 }
 
@@ -108,18 +110,20 @@ void initManagedDevice() {
  }
 }
 
-void publishData(float temp) {
- String payload = "{\"d\":{\"temp\":";
- payload += temp;
- payload += "}}";
+void publishData(JsonObject& data) {
+  StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  root["d"] = data;
+  String payload;
+  root.printTo(payload);
 
- Serial.print("Sending payload: "); Serial.println(payload);
+  Serial.print("Sending payload: "); Serial.println(payload);
 
- if (client.publish(publishTopic, (char*) payload.c_str())) {
-   Serial.println("Publish OK");
- } else {
-   Serial.println("Publish FAILED");
- }
+  if (client.publish(publishTopic, (char*) payload.c_str())) {
+    Serial.println("Publish OK");
+  } else {
+    Serial.println("Publish FAILED");
+  }
 }
 
 void callback(char* topic, byte* payload, unsigned int payloadLength) {

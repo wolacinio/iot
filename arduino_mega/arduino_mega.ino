@@ -1,16 +1,12 @@
+#include<BME280I2C.h>
 #include<SoftwareSerial.h>
-#include<OneWire.h>
-#include<DallasTemperature.h>
-
-#define ONE_WIRE_BUS 12
-#define TEMPERATURE_PRECISION 9
+#include<Wire.h>
+#include<SPI.h>
+#include<ArduinoJson.h>
 
 SoftwareSerial softSerial(10, 11); // RX, TX
-OneWire oneWire(ONE_WIRE_BUS);
-DallasTemperature sensors(&oneWire);
+BME280I2C bme;
 
-int numberOfDevices;
-DeviceAddress tempDeviceAddress;
 int publishInterval = 30000;  //30 seconds
 int minPublishInterval = 5000;  //5 seconds
 long lastPublishMillis;
@@ -18,46 +14,25 @@ long lastPublishMillis;
 void setup() {
   softSerial.begin(9600);
   Serial.begin(115200);
-  initTempSensor();
+  Wire.begin();
+  initSensor();
 }
 
-void initTempSensor() {
-  sensors.begin();
-  numberOfDevices = sensors.getDeviceCount();
-  Serial.print("Locating temp. devices...");
-  Serial.print("Found ");
-  Serial.print(numberOfDevices, DEC);
-  Serial.println(" devices.");
-
-  for(int i=0;i<numberOfDevices; i++) {
-    if(sensors.getAddress(tempDeviceAddress, i)) {
-      Serial.print("Found device ");
-      Serial.print(i, DEC);
-      Serial.print(" with address: ");
-      printAddress(tempDeviceAddress);
-      Serial.println();
-    
-      Serial.print("Setting resolution to ");
-      Serial.println(TEMPERATURE_PRECISION,DEC);
-    
-      sensors.setResolution(tempDeviceAddress, TEMPERATURE_PRECISION);
-    
-      Serial.print("Resolution actually set to: ");
-      Serial.print(sensors.getResolution(tempDeviceAddress), DEC);
-      Serial.println();
-      
-    } else {
-      Serial.print("Found ghost device at ");
-      Serial.print(i, DEC);
-      Serial.print(" but could not detect address. Check power and cabling");
-    }
+void initSensor() {
+  while(!bme.begin()) {
+    Serial.println("Could not find BME280 sensor!");
+    delay(2000);
   }
-}
 
-void printAddress(DeviceAddress deviceAddress) {
-  for (uint8_t i = 0; i < 8; i++) {
-    if (deviceAddress[i] < 16) Serial.print("0");
-    Serial.print(deviceAddress[i], HEX);
+  switch(bme.chipModel()) {
+    case BME280::ChipModel_BME280:
+      Serial.println("Found BME280 sensor!");
+      break;
+    case BME280::ChipModel_BMP280:
+      Serial.println("Found BMP280 sensor!");
+      break;
+    default:
+      Serial.println("Found UNKNOWN sensor! Error!");
   }
 }
 
@@ -71,22 +46,25 @@ boolean hasIntervalElapsed() {
 }
 
 void readSensorData() {
-  sensors.requestTemperatures();
-  for(int i=0;i<numberOfDevices; i++) {
-    if(sensors.getAddress(tempDeviceAddress, i)) {
-      Serial.print("Temperature for device: ");
-      Serial.println(i,DEC);
-      float tempC = sensors.getTempC(tempDeviceAddress);
-      Serial.print("Temp C: ");
-      Serial.println(tempC);
-      sendSensorData(tempC);
-    }
-  }
+  float temp(NAN), hum(NAN), pres(NAN);
+  BME280::TempUnit tempUnit(BME280::TempUnit_Celsius);
+  BME280::PresUnit presUnit(BME280::PresUnit_hPa);
+  bme.read(pres, temp, hum, tempUnit, presUnit);
+  Serial.print("Temp: ");
+  Serial.print(temp);
+  Serial.print(" \u00B0C");
+  Serial.print("\t\tPressure: ");
+  Serial.print(pres);
+  Serial.println(" hPa");
+  sendSensorData(temp, pres);
 }
 
-void sendSensorData(float temp) {
-  softSerial.print(temp);
-  softSerial.print("\n");
+void sendSensorData(float temp, float pres) {
+  StaticJsonBuffer<200> jsonBuffer;
+  JsonObject& root = jsonBuffer.createObject();
+  root["temp"] = temp;
+  root["pres"] = pres;
+  root.printTo(softSerial);
   lastPublishMillis = millis();
 }
 
